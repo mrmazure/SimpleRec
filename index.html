@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SimpleRec - RadioToosl.be</title>
+    <!-- Use the inspiration favicon if available, else a default one -->
+    <link rel="icon" href="favicon.png" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@600;700&family=Roboto+Mono:wght@500;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <div class="app-window">
+        <!-- Header -->
+        <header>
+            <div class="header-brand">
+                <img src="favicon.png" class="header-logo" alt="SimpleRec logo" onerror="this.style.display='none'">
+                <h1 class="title">Simple<span>Rec</span></h1>
+            </div>
+            <div class="tagline">Enregistrement & Édition - By MrMazure</div>
+        </header>
+
+        <main>
+            <!-- SECTION 1: ENREGISTREMENT -->
+            <section id="recording-section" class="active-section">
+
+                <div class="top-row">
+                    <!-- Source selection -->
+                    <div class="input-group">
+                        <label for="mic-select">Source Audio</label>
+                        <select id="mic-select">
+                            <option value="">Chargement des périphériques...</option>
+                        </select>
+                    </div>
+
+                    <!-- Filename -->
+                    <div class="input-group flex-fill">
+                        <label for="filename-input">Nom du Fichier</label>
+                        <input type="text" id="filename-input" placeholder="enregistrement_01"
+                            value="enregistrement_01">
+                    </div>
+                </div>
+
+                <!-- Timer & Visualization -->
+                <div class="recording-display">
+
+                    <div class="clock-container">
+                        <div id="recording-indicator" class="idle"></div>
+                        <div id="timer-display">00:00:00</div>
+                    </div>
+
+                    <div class="visualization-container">
+                        <!-- Spectrum canvas -->
+                        <canvas id="spectrum-canvas" width="600" height="150"></canvas>
+                        <!-- VU Meter canvas -->
+                        <div class="vu-wrapper">
+                            <canvas id="vu-canvas" width="30" height="150"></canvas>
+                            <span id="vu-value">-∞ dB</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Controls -->
+                <div class="controls-row">
+                    <button id="btn-record" class="btn-large btn-danger" title="Démarrer l'enregistrement (R)">
+                        <span class="icon">⏺</span> REC
+                    </button>
+                    <button id="btn-pause" class="btn-large btn-warning" title="Mettre en pause (P)" disabled>
+                        <span class="icon">⏸</span> PAUSE
+                    </button>
+                    <button id="btn-stop" class="btn-large btn-surface" title="Arrêter l'enregistrement (S)" disabled>
+                        <span class="icon">⏹</span> STOP
+                    </button>
+                </div>
+
+                <div id="mic-error-msg" class="status-msg status-error" style="display: none;"></div>
+
+            </section>
+
+            <!-- SECTION 2: ÉDITEUR (POST-REC) -->
+            <section id="editor-section" style="display: none;">
+
+                <div class="editor-header">
+                    <h2>Éditeur de Forme d'Onde</h2>
+                    <div class="editor-actions">
+                        <button id="btn-undo" class="btn-small" title="Annuler (Ctrl+Z)" disabled>↩ Annuler</button>
+                    </div>
+                </div>
+
+                <div class="waveform-container" id="waveform-container">
+                    <canvas id="waveform-canvas"></canvas>
+                    <div id="selection-layer"></div>
+                    <div id="playhead"></div>
+                    <div id="zoom-indicator" class="zoom-indicator">1×</div>
+                </div>
+                <div class="waveform-scroll-track" id="waveform-scroll-track">
+                    <div id="waveform-scroll-thumb"></div>
+                </div>
+
+                <div class="editor-toolbar">
+                    <div class="playback-controls">
+                        <button id="btn-play" class="btn-small btn-success" title="Jouer (Espace)">⏵ Jouer</button>
+                        <button id="btn-stop-playback" class="btn-small btn-surface" title="Stop">⏹ Stop</button>
+                    </div>
+
+                    <div class="cut-controls">
+                        <span class="toolbar-label">Outils de coupe:</span>
+                        <button id="btn-cut-selection" class="btn-small" disabled>✂ Sélection</button>
+                        <button id="btn-cut-before" class="btn-small" disabled>⇤ Avant</button>
+                        <button id="btn-cut-after" class="btn-small" disabled>⇥ Après</button>
+                        
+                        <button id="btn-normalize" class="btn-small" style="margin-left:15px;" title="Ajuste le volume d'export à -14 LUFS (Standard Web/Podcasts)">🔊 Normaliser (-14 LUFS)</button>
+                    </div>
+                </div>
+
+                <!-- SECTION 3: EXPORT -->
+                <div class="export-panel">
+                    <h3>Exportation</h3>
+                    <div class="export-options">
+                        <div class="input-group">
+                            <label for="export-format">Format</label>
+                            <select id="export-format">
+                                <option value="wav">WAV (.wav)</option>
+                                <option value="mp3">MP3 (.mp3)</option>
+                                <option value="ogg" selected>OGG (.ogg)</option>
+                                <option value="flac">FLAC (.flac)</option>
+                                <option value="aac">AAC (.m4a)</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group" id="bitrate-group">
+                            <label id="bitrate-label" for="export-bitrate">Bitrate (OGG)</label>
+                            <select id="export-bitrate">
+                                <option value="96k">96 kbps</option>
+                                <option value="128k">128 kbps</option>
+                                <option value="192k" selected>192 kbps</option>
+                                <option value="256k">256 kbps</option>
+                                <option value="320k">320 kbps</option>
+                            </select>
+                        </div>
+
+                        <div class="input-group">
+                            <label for="export-channels">Canaux</label>
+                            <select id="export-channels">
+                                <option value="stereo" selected>Stéréo</option>
+                                <option value="mono">Mono</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="export-action">
+                        <button id="btn-export" class="btn-primary">
+                            <span class="icon">💾</span> EXPORTER
+                        </button>
+                        <div id="export-size-estimate">Taille estimée : ---</div>
+                    </div>
+
+                    <div id="export-progress" style="display:none">
+                        <div class="progress-bar-bg">
+                            <div id="export-progress-fill" class="progress-fill"></div>
+                        </div>
+                        <div class="conv-progress-text">
+                            <span id="export-progress-label">Chargement FFmpeg...</span>
+                            <span id="export-progress-pct">0%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="back-row">
+                    <button id="btn-new-rec" class="btn-small btn-surface">🗑 Nouvel Enregistrement</button>
+                </div>
+
+            </section>
+        </main>
+
+        <footer class="status-bar">
+            <div class="status-left" id="global-status">Prêt</div>
+            <div class="status-right">Outil RadioTools</div>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <!-- jsmediatags, FFmpeg loaded lazily when required -->
+    <script src="app.js"></script>
+</body>
+
+</html>
