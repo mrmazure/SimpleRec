@@ -48,6 +48,10 @@
                     </div>
                 </div>
 
+                <div class="open-file-row">
+                    <button id="btn-open-file-rec" class="btn-small btn-surface">📂 Ouvrir un fichier audio</button>
+                </div>
+
                 <!-- Timer & Visualization -->
                 <div class="recording-display">
 
@@ -176,6 +180,7 @@
 
                 <div class="back-row">
                     <button id="btn-new-rec" class="btn-small btn-surface">🗑 Nouvel Enregistrement</button>
+                    <button id="btn-open-file-edit" class="btn-small btn-surface">📂 Ouvrir un fichier audio</button>
                 </div>
 
             </section>
@@ -186,6 +191,9 @@
             <div class="status-right">Outil RadioTools</div>
         </footer>
     </div>
+
+    <!-- Input fichier audio caché (partagé entre les deux sections) -->
+    <input type="file" id="open-file-input" accept="audio/*" style="display:none">
 
     <!-- Scripts -->
     <!-- jsmediatags, FFmpeg loaded lazily when required -->

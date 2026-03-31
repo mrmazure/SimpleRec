@@ -506,9 +506,17 @@ button:disabled {
     color: var(--text-muted);
 }
 
+.open-file-row {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
 .back-row {
     display: flex;
     justify-content: center;
+    gap: 2rem;
     margin-top: 1rem;
 }
 

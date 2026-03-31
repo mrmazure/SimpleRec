@@ -46,6 +46,9 @@ let isScrollbarDragging = false;
 let ffmpegInstance = null;
 let isFFmpegLoaded = false;
 
+// Suivi export (pour incrémenter le numéro de fichier après export)
+let hasExported = false;
+
 // Preview micro (monitoring sans enregistrement)
 let previewStream = null;
 let previewAnimId = 0;
@@ -99,6 +102,9 @@ const UI = {
     exportProgressLabel: document.getElementById('export-progress-label'),
     exportProgressPct: document.getElementById('export-progress-pct'),
     btnNewRec: document.getElementById('btn-new-rec'),
+    btnOpenFileRec: document.getElementById('btn-open-file-rec'),
+    btnOpenFileEdit: document.getElementById('btn-open-file-edit'),
+    openFileInput: document.getElementById('open-file-input'),
     globalStatus: document.getElementById('global-status')
 };
 
@@ -537,7 +543,17 @@ function closeEditor() {
     audioChunks = [];
     currentAudioBuffer = null;
     undoStack = [];
-    
+
+    if (hasExported) {
+        const current = UI.filenameInput.value.trim();
+        const match = current.match(/^(.*?)(\d+)$/);
+        if (match) {
+            const next = (parseInt(match[2], 10) + 1).toString().padStart(match[2].length, '0');
+            UI.filenameInput.value = match[1] + next;
+        }
+        hasExported = false;
+    }
+
     UI.secEdit.style.display = 'none';
     UI.secRec.style.display = 'block';
     UI.timerDisplay.textContent = '00:00:00';
@@ -1482,10 +1498,11 @@ async function performExport() {
 }
 
 function finishExport() {
+    hasExported = true;
     UI.exportProgressLabel.textContent = "Terminé !";
     UI.exportProgressPct.textContent = "100%";
     UI.exportProgressFill.style.width = "100%";
-    
+
     setTimeout(() => {
         UI.exportProgress.style.display = 'none';
         UI.btnExport.disabled = false;
@@ -1506,12 +1523,59 @@ function downloadBlob(blob, filename) {
     }, 100);
 }
 
+// ==========================================
+// CHARGEMENT D'UN FICHIER AUDIO EXISTANT
+// ==========================================
+
+async function loadAudioFile(file) {
+    if (!file) return;
+    try {
+        updateStatus("Chargement du fichier...");
+        const arrayBuffer = await file.arrayBuffer();
+        if (!audioContext || audioContext.state === 'closed') {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+        } else if (audioContext.state === 'suspended') {
+            await audioContext.resume();
+        }
+        currentAudioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        enforceSymmetricChannels(currentAudioBuffer);
+        undoStack = [cloneAudioBuffer(currentAudioBuffer)];
+
+        // Pré-remplir le nom du fichier sans l'extension
+        const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '');
+        UI.filenameInput.value = nameWithoutExt;
+
+        // Si on vient de la section enregistrement, stopper le preview
+        if (UI.secRec.style.display !== 'none') {
+            stopPreview();
+            cancelAnimationFrame(idleAnimId);
+        }
+
+        hasExported = false;
+        showEditor();
+        renderWaveform();
+        updateEstimateSize();
+        updateStatus("Fichier chargé — prêt pour l'édition");
+    } catch (err) {
+        console.error("Chargement fichier:", err);
+        updateStatus("Erreur : format audio non supporté ou fichier invalide");
+    }
+}
+
 // ------ Event Listeners initiaux ------
 UI.btnRec.addEventListener('click', startRecording);
 UI.btnPause.addEventListener('click', pauseRecording);
 UI.btnStop.addEventListener('click', stopRecording);
 UI.btnNewRec.addEventListener('click', closeEditor);
 UI.btnExport.addEventListener('click', performExport);
+
+UI.btnOpenFileRec.addEventListener('click', () => UI.openFileInput.click());
+UI.btnOpenFileEdit.addEventListener('click', () => UI.openFileInput.click());
+UI.openFileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    UI.openFileInput.value = ''; // reset pour permettre de rouvrir le même fichier
+    loadAudioFile(file);
+});
 
 // Changement de source → relancer le monitoring
 UI.micSelect.addEventListener('change', () => {
