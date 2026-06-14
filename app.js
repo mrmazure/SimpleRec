@@ -34,6 +34,8 @@ let selectionStart = 0;
 let selectionEnd = 0;
 let isDragging = false;
 let dragStartX = 0;
+let hasDraggedPastThreshold = false; // distingue un simple clic d'un glissement de sélection
+const DRAG_THRESHOLD_PX = 4;         // déplacement min (px CSS) avant de démarrer une sélection
 
 // Zoom waveform (Nouvelle implémentation Viewport PPS)
 let pps = 50; // Pixels Per Second
@@ -209,12 +211,15 @@ async function startRecording() {
         isPaused = false;
         startTime = Date.now();
         
-        // UI Updates
-        UI.btnRec.disabled = true;
+        // UI Updates — le bouton REC devient "Relancer" pendant l'enregistrement
+        UI.btnRec.disabled = false;
+        UI.btnRec.innerHTML = '<span class="icon">⟲</span> RELANCER';
+        UI.btnRec.classList.replace('btn-danger', 'btn-restart');
+        UI.btnRec.title = "Relancer un nouvel enregistrement (efface l'audio en cours)";
         UI.btnPause.disabled = false;
         UI.btnStop.disabled = false;
         UI.micSelect.disabled = true;
-        
+
         UI.recIndicator.className = 'recording';
         updateStatus("Enregistrement en cours...");
         
@@ -266,16 +271,50 @@ function stopRecording() {
     isRecording = false;
     isPaused = false;
     
-    // UI Updates
+    // UI Updates — le bouton redevient "REC"
     UI.btnRec.disabled = false;
+    UI.btnRec.innerHTML = '<span class="icon">⏺</span> REC';
+    UI.btnRec.classList.replace('btn-restart', 'btn-danger');
+    UI.btnRec.title = "Démarrer l'enregistrement (R)";
     UI.btnPause.disabled = true;
     UI.btnStop.disabled = true;
     UI.micSelect.disabled = false;
-    
+
     UI.recIndicator.className = 'idle';
     UI.btnPause.innerHTML = '<span class="icon">⏸</span> PAUSE';
     UI.btnPause.classList.replace('btn-success', 'btn-warning');
     updateStatus("Traitement de l'audio...");
+}
+
+// Jette l'enregistrement en cours et en relance un propre immédiatement,
+// sans passer par l'éditeur (utile quand on s'est trompé au démarrage).
+async function restartRecording() {
+    if (!isRecording) return;
+
+    // Neutralise les handlers de l'ancien recorder pour ne pas traiter l'audio capturé
+    if (mediaRecorder) {
+        mediaRecorder.ondataavailable = null;
+        mediaRecorder.onstop = null;
+        try { mediaRecorder.stop(); } catch (e) {}
+    }
+    if (micStream) micStream.getTracks().forEach(track => track.stop());
+
+    clearInterval(timerInterval);
+    cancelAnimationFrame(reqAnimFrameId);
+
+    audioChunks = [];
+    isRecording = false;
+    isPaused = false;
+
+    // Réinitialise l'affichage avant de relancer
+    UI.timerDisplay.textContent = '00:00:00';
+    UI.btnPause.innerHTML = '<span class="icon">⏸</span> PAUSE';
+    UI.btnPause.classList.replace('btn-success', 'btn-warning');
+    UI.recIndicator.className = 'idle';
+
+    updateStatus("Nouvel enregistrement...");
+
+    await startRecording();
 }
 
 function updateTimer() {
@@ -732,14 +771,18 @@ function renderSelectionOverlay() {
 
     UI.selectionLayer.style.display = 'block';
     if (selectionEnd - selectionStart < 0.001) {
-        // Clic simple = Curseur
+        // Clic simple = Curseur (ligne fine, sans les bordures de sélection)
         UI.selectionLayer.style.left  = left + 'px';
-        UI.selectionLayer.style.width = '2px';
+        UI.selectionLayer.style.width = '1px';
+        UI.selectionLayer.style.borderLeft  = 'none';
+        UI.selectionLayer.style.borderRight = 'none';
         UI.selectionLayer.style.backgroundColor = '#ef4444'; // Curseur rouge
     } else {
         // Plage de sélection
         UI.selectionLayer.style.left  = left + 'px';
         UI.selectionLayer.style.width = Math.max(1, right - left) + 'px';
+        UI.selectionLayer.style.borderLeft  = ''; // restaure les bordures du CSS
+        UI.selectionLayer.style.borderRight = '';
         UI.selectionLayer.style.backgroundColor = ''; // Remet la couleur par défaut du CSS
     }
 }
@@ -749,6 +792,7 @@ function renderSelectionOverlay() {
 UI.waveformContainer.addEventListener('mousedown', e => {
     if (!currentAudioBuffer) return;
     isDragging  = true;
+    hasDraggedPastThreshold = false;
     dragStartX  = Math.max(0, Math.min(e.offsetX, UI.waveformContainer.clientWidth));
     selectionStart = pixelToTime(dragStartX);
     selectionEnd   = selectionStart;
@@ -758,13 +802,31 @@ UI.waveformContainer.addEventListener('mousedown', e => {
 UI.waveformContainer.addEventListener('mousemove', e => {
     if (!isDragging || !currentAudioBuffer) return;
     const curX = Math.max(0, Math.min(e.offsetX, UI.waveformContainer.clientWidth));
+
+    // Tant que le déplacement reste sous le seuil, on reste sur un simple clic (curseur)
+    if (!hasDraggedPastThreshold) {
+        if (Math.abs(curX - dragStartX) < DRAG_THRESHOLD_PX) return;
+        hasDraggedPastThreshold = true;
+    }
+
     selectionStart = pixelToTime(Math.min(dragStartX, curX));
     selectionEnd   = pixelToTime(Math.max(dragStartX, curX));
     renderSelectionOverlay();
 });
 
 window.addEventListener('mouseup', () => {
-    if (isDragging) { isDragging = false; checkSelection(); }
+    if (!isDragging) return;
+    isDragging = false;
+
+    if (!hasDraggedPastThreshold) {
+        // Simple clic : on place le curseur (sélection nulle)...
+        selectionEnd = selectionStart;
+        renderSelectionOverlay();
+        // ...et si la lecture est en cours, on la reprend depuis ce point
+        if (isPlaying) startPlayback();
+    }
+
+    checkSelection();
 });
 
 // ------ Zoom molette / Pan trackpad ------
@@ -1232,7 +1294,7 @@ window.addEventListener('keyup', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
 
     if (UI.secRec.style.display !== 'none') {
-        if (e.key.toLowerCase() === 'r' && !UI.btnRec.disabled) startRecording();
+        if (e.key.toLowerCase() === 'r' && !isRecording && !UI.btnRec.disabled) startRecording();
         if (e.key.toLowerCase() === 'p' && !UI.btnPause.disabled) pauseRecording();
         if (e.key.toLowerCase() === 's' && !UI.btnStop.disabled) stopRecording();
     }
@@ -1563,7 +1625,10 @@ async function loadAudioFile(file) {
 }
 
 // ------ Event Listeners initiaux ------
-UI.btnRec.addEventListener('click', startRecording);
+UI.btnRec.addEventListener('click', () => {
+    if (isRecording) restartRecording();
+    else startRecording();
+});
 UI.btnPause.addEventListener('click', pauseRecording);
 UI.btnStop.addEventListener('click', stopRecording);
 UI.btnNewRec.addEventListener('click', closeEditor);

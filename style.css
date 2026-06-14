@@ -205,6 +205,17 @@ button:disabled {
     font-size: 1rem;
 }
 
+.btn-restart {
+    background-color: var(--accent);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(73, 79, 214, 0.4);
+}
+
+.btn-restart:hover:not(:disabled) {
+    background-color: var(--accent-hover);
+    transform: translateY(-2px);
+}
+
 /* --- Section 1: Recording --- */
 .top-row {
     display: flex;
@@ -312,6 +323,7 @@ button:disabled {
 
 .controls-row {
     display: flex;
+    flex-wrap: wrap;
     justify-content: center;
     gap: 1rem;
     margin-top: 1.5rem;
